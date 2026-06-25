@@ -3,7 +3,8 @@
     batchSize: 3,
     batchDelay: 500,
     fetchPageDelay: 300,
-    pageSize: 50
+    pageSize: 50,
+    pauseOnRisk: true
   };
 
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -64,6 +65,18 @@
     return all;
   }
 
+  function isRiskResponse(result) {
+    if (!result || result.code === 0) return false;
+
+    const text = [
+      result.message,
+      result.msg,
+      JSON.stringify(result.data || {})
+    ].filter(Boolean).join(" ");
+
+    return /手机|手机号|验证|验证码|安全|风控|频繁|稍后|限制|实名|risk|verify|captcha/i.test(text);
+  }
+
   async function unfollow(user, csrf) {
     const body = new URLSearchParams({
       fid: user.mid,
@@ -82,11 +95,15 @@
 
     if (result?.code === 0) {
       console.log(`已取关：${user.uname} (${user.mid})`);
-      return true;
+      return { ok: true, risk: false };
     }
 
     console.warn(`取关失败：${user.uname} (${user.mid})`, result);
-    return false;
+    return {
+      ok: false,
+      risk: config.pauseOnRisk && isRiskResponse(result),
+      result
+    };
   }
 
   try {
@@ -123,11 +140,22 @@
 
       const batch = list.slice(i, i + config.batchSize);
       const results = await Promise.all(batch.map(user => unfollow(user, csrf)));
+      const riskResult = results.find(result => result.risk);
 
       done += batch.length;
-      ok += results.filter(Boolean).length;
+      ok += results.filter(result => result.ok).length;
 
       console.log(`进度：${done}/${list.length}，成功：${ok}`);
+
+      if (riskResult) {
+        window.__stopBiliUnfollow = true;
+        console.warn("检测到可能的安全验证或频控响应，脚本已暂停。", riskResult.result);
+        window.alert(
+          "检测到 Bilibili 可能要求手机号/验证码/安全验证，脚本已暂停。\n\n请按网页提示完成官方验证，或稍后降低 batchSize 后重新运行。"
+        );
+        break;
+      }
+
       await sleep(config.batchDelay);
     }
 

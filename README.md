@@ -10,6 +10,7 @@
 - 自动分页获取完整关注列表
 - 并发批量取关，默认每批 3 个
 - 支持中途停止
+- 检测到手机号、验证码、安全校验或频控响应时自动暂停
 - 运行前二次确认
 - 无依赖，无需安装
 
@@ -35,7 +36,8 @@ window.__stopBiliUnfollow = true
 const config = {
   batchSize: 3,
   batchDelay: 500,
-  fetchPageDelay: 300
+  fetchPageDelay: 300,
+  pauseOnRisk: true
 };
 ```
 
@@ -45,6 +47,19 @@ const config = {
 - 更快：`batchSize: 5`, `batchDelay: 300`
 
 不建议把并发调得太高，可能触发接口频控或操作失败。
+
+如果曾经触发过手机号或安全验证，建议先使用更保守的配置：
+
+```js
+const config = {
+  batchSize: 1,
+  batchDelay: 1500,
+  fetchPageDelay: 500,
+  pauseOnRisk: true
+};
+```
+
+脚本不会绕过 Bilibili 的官方安全验证。检测到类似响应时，它会停止继续取关并弹窗提醒；完成官方验证或等待限制恢复后，可以降低速度重新运行。
 
 ## 注意事项
 
